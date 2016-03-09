@@ -137,8 +137,9 @@ def read_davis_tecplot_folder_and_rotate_to_serration_surface(tecplot_folder,
     if plot:
         show_sample_bls_from_df(df)
 
+    df = get_vorticity( df )
 
-    df.to_pickle("data/{0}.p".format(df.case_name.unique()[0]))
+    df.to_pickle("averaged_data/{0}.p".format(df.case_name.unique()[0]))
 
 
 def show_sample_bls_from_df(df):
@@ -427,10 +428,6 @@ def get_angle_between_points(point1, point2):
     return degrees(atan( delta_y / delta_x ))
 
 
-def show_surface_from_pickle(pickle_file,variable='u'):
-
-    df = load_df_from_pickle(pickle_file)
-    show_surface_from_df(df,variable=variable)
 
 def show_surface_from_df(df, variable=[], points = [], mask = []):
     import matplotlib.pyplot as plt
@@ -699,148 +696,4 @@ def get_Reynolds_number(U, C = 0.2):
     mu  = 1.813e-5
 
     return rho*U*C/mu
-
-def get_edge_velocity(df, 
-                      condition = 'vorticity_integration_rate_of_change', 
-                      threshold = 1.00,
-                      Ue_file = 'Ue_data.csv',
-                     ):
-    from scipy.integrate import simps
-    from numpy import diff
-    
-    U_edge = 0 
-
-    df = df.sort_values( by = 'y', ascending = True )
-    df = df[df.y>5]
-    df = df.reset_index(drop=True)
-
-    # Get the integrated vorticity #############################################
-    integration_result = []
-    for i in range(len(df.y)):
-        integration_result.append(
-            - simps(df.vorticity_xy.ix[:i], 
-                  x=df.y.ix[:i]/1000., 
-                  even='avg'
-                 )
-        )
-    df['vorticity_integration'] = integration_result
-    rate_of_change = diff(df.vorticity_integration)/diff(df.y/1000.)
-    rate_of_change = list(rate_of_change) + [rate_of_change[-1]]
-    df['vorticity_integration_rate_of_change'] = rate_of_change
-            
-    ############################################################################
-
-    # Get the rms rates of vertical change #####################################
-    df['u_rms_rate_of_change'] = list(diff(df.u_rms)/diff(df.y/1000.))+[0]
-    df['v_rms_rate_of_change'] = list(diff(df.v_rms)/diff(df.y/1000.))+[0]
-    ############################################################################
-
-    while not U_edge:
-        for y_loc in df.iterrows():
-            if y_loc[1][condition] < threshold:
-                U_edge = y_loc[1]['u']
-                break
-
-        if not U_edge:
-            print "   Warning, couldn't still find U_edge based on {0}"\
-                    .format(condition)
-            threshold += 1
-            print "   ...increasing the threshold by 1 to {0}".format(threshold)
-
-    return U_edge
-
-def get_boundary_layer_values( df ):
-    import pandas as pd
-
-    def get_delta_99(df,U_e):
-        df = df.append( {'u' : 0.99*U_e} , ignore_index = True)
-        df = df.sort_values( by = 'u' )
-        df = df.apply(pd.Series.interpolate)
-        return df[ df.u == 0.99*U_e ].y.values[0]
-
-    def get_delta_momentum(df,U_e):
-        from scipy.integrate import simps
-        return simps(
-            ( df.u / U_e ) * (1 - df.u / U_e ), 
-            x=df.y , 
-            even='avg'
-        )
-
-    def get_delta_displacement(df,U_e):
-        from scipy.integrate import simps
-        return simps(
-            1 - df.u / U_e , 
-            x=df.y , 
-            even='avg'
-        )
-
-    U_e = get_edge_velocity(df)
-
-    delta_99           = get_delta_99(df,U_e)
-    delta_displacement = get_delta_displacement(df,U_e)
-    delta_momentum     = get_delta_momentum(df,U_e)
-
-    return U_e, delta_99, delta_displacement, delta_momentum
-
-
-def write_boundary_layers(df, 
-                          boundary_layers_file = 'boundary_layers_file.csv'):
-    import pandas as pd
-    from os.path import isfile
-
-    trailing_edge,phi,alpha,U,z = decript_case_name(df.case_name.unique()[0])
-
-    U_e, delta_99, delta_displacement, delta_momentum = \
-            get_boundary_layer_values(df)
-
-    case_bl_df_tex = pd.DataFrame( 
-        data = 
-        {'Trailing edge'  : trailing_edge,
-         r'$\varphi$'     : phi,
-         r'$\alpha$'      : alpha,
-         r'$z/\lambda$'   : z,
-         r'$\delta_{99}$' : "{0:.1f}".format(delta_99),
-         r'$\delta^*$'    : "{0:.1f}".format(delta_displacement),
-         r'$\theta$'      : "{0:.1f}".format(delta_momentum),
-         'x loc'          : df.x_loc.unique()[0],
-         r'U e'           : U_e,
-        }, index = [0]
-    )
-    case_bl_df_csv = pd.DataFrame( 
-        data = 
-        {'Trailing_edge':  trailing_edge,
-         'phi':            phi,
-         'alpha':          alpha,
-         'z_loc':          z,
-         'delta_99':       "{0:.1f}".format(delta_99),
-         'delta_disp':     "{0:.1f}".format(delta_displacement),
-         'delta_momentum': "{0:.1f}".format(delta_momentum),
-         'x_loc':          df.x_loc.unique()[0],
-         'Ue':             U_e,
-        }, index = [0]
-    )
-
-    if isfile(boundary_layers_file):
-        bl_df_csv = pd.read_csv(boundary_layers_file)
-        bl_df_csv = bl_df_csv.append( case_bl_df_csv )
-        bl_df_csv = bl_df_csv.drop_duplicates()
-        bl_df_csv.to_csv( boundary_layers_file , index=False)
-
-        bl_df_tex = pd.read_csv(boundary_layers_file)
-        bl_df_tex = bl_df_tex.append( case_bl_df_tex )
-        bl_df_tex = bl_df_tex.drop_duplicates()
-        bl_df_tex.to_latex( 
-            boundary_layers_file.replace('.csv','.tex') , 
-            index=False,
-            col_space = 2,
-            escape = False
-        )
-    else:
-        case_bl_df_csv.to_csv( boundary_layers_file , index=False)
-        case_bl_df_tex.to_latex( 
-            boundary_layers_file.replace('.csv','.tex') ,
-            index=False,
-            col_space = 2,
-            escape = False
-        )
 
