@@ -55,8 +55,15 @@ def get_edge_velocity(df,
                   even='avg'
                  )
         )
+    if not len( integration_result ):
+        return nan
+
     df['vorticity_integration'] = integration_result
     rate_of_change = diff(df.vorticity_integration)/diff(df.y/1000.)
+
+    if not len( rate_of_change ):
+        return nan
+
     rate_of_change = list(rate_of_change) + [rate_of_change[-1]]
     df['vorticity_integration_rate_of_change'] = rate_of_change
             
@@ -260,8 +267,9 @@ def run_bl_analysis( pickles_folder = 0):
                 ignore_index = True
             )
 
-        case_bl_df = clean_data( case_bl_df, 'delta_99', window = 10 , 
-                                threshold = 1.0 )
+        if 'delta_99' in case_bl_df.columns:
+            case_bl_df = clean_data( case_bl_df, 'delta_99', window = 10 , 
+                                    threshold = 1.0 )
 
         bl_df = bl_df.append( case_bl_df, ignore_index = True )
 
@@ -287,6 +295,46 @@ def clean_data( df , var , window = 3, threshold = 0.5):
     df = df[ abs( df[var] - df.this_mean ) <= threshold * df[var].std() ]
 
     return df[ original_columns ]
+
+def return_bl_parameters( case, x_series ):
+    from pandas import read_pickle, DataFrame
+    from scipy.optimize import curve_fit
+
+    bl_pickle_file = 'BLData.p'
+    bl_df = read_pickle( bl_pickle_file )
+
+
+    if 'z00' in case:
+        limits = (0, 43)
+    elif 'z05' in case:
+        limits = (0, 25)
+    else:
+        limits = (0, 10)
+
+    variables = [ 'Ue', 'delta_99', 'delta_displacement', 
+                'delta_momentum' ]
+    bl_param_df = DataFrame()
+
+    for x in x_series:
+        data = {}
+        for var in variables:
+
+            case_df = bl_df[ bl_df.case == case ][ ['x',var] ].dropna()
+
+            popt, pvar = curve_fit( 
+                quad_func, 
+                case_df[ ( case_df.x < limits[1] ) & ( case_df.x > 0 )].x, 
+                case_df[ ( case_df.x < limits[1] ) & ( case_df.x > 0 )][var] 
+            )
+
+            data[var] = quad_func( x, popt[0], popt[1], popt[2] ) ,
+
+        bl_param_df = bl_param_df.append(
+            DataFrame( data = data, index = [0] ),
+            ignore_index = False
+        )
+
+    return bl_param_df
 
 def plot_all_bls( bl_pickle_file = 0 ):
     import matplotlib.pyplot as plt

@@ -138,7 +138,7 @@ def correct_df_translation_rotation( df ):
         )
         print "    among"
         print "    {0}".format( correction_dict.keys() )
-        x_corr, y_corr, angle_corr = (0, 0, 0)
+        x_corr, y_corr, angle_corr = ( 0, 0, 0 )
 
     df['x_orig'] = round( df.x.values, 3 )
     df['y_orig'] = round( df.y.values, 3 )
@@ -183,8 +183,8 @@ def rotate_df(df,degrees = 0):
     df_rotated['w'] = df['w']
 
     df_rotated['t'] = df.t
-    df_rotated['x_orig'] = df.x_orig
-    df_rotated['y_orig'] = df.y_orig
+    df_rotated['x_orig'] = x
+    df_rotated['y_orig'] = y
 
 
     for col in df.select_dtypes(include=['object']).columns:
@@ -282,10 +282,11 @@ def read_raw_tecplot_folder_and_write_pandas_hdf5(
     output_root           = 0,
     overwrite             = False,
 ):
-    from os.path import isfile,join,splitext
-    from os import listdir
-    from progressbar import ProgressBar,Percentage,Bar,ETA,SimpleProgress
-    from pandas import DataFrame
+    from os.path     import isfile,join,splitext
+    from os          import listdir
+    from progressbar import ProgressBar,Percentage,Bar
+    from progressbar import ETA,SimpleProgress
+    from pandas      import DataFrame, HDFStore
 
     # File related things ######################################################
     if not output_file:
@@ -299,10 +300,10 @@ def read_raw_tecplot_folder_and_write_pandas_hdf5(
         output_file = output_file.replace("_Aligned.hdf5","")+"_Aligned.hdf5"
 
     if isfile(join( output_root, output_file )) and not overwrite:
-        print "  Exiting; file exists:\n{0}".format(output_file)
+        print "  Exiting; file exists:\n      {0}".format(output_file)
         return 0
     else:
-        print "  Writing\n{0}".format(output_file)
+        print "  Writing\n      {0}".format(output_file)
 
     # ##########################################################################
 
@@ -322,6 +323,9 @@ def read_raw_tecplot_folder_and_write_pandas_hdf5(
          ).start()
 
     cnt = 0
+
+    hdf_store = HDFStore( join( output_root, output_file ) )
+
     for f,t in zip(time_step_files,range(len(time_step_files))):
 
        df_t = read_tecplot_file(
@@ -335,16 +339,6 @@ def read_raw_tecplot_folder_and_write_pandas_hdf5(
        else:
            df = df.append( df_t, ignore_index = True)
 
-           try:
-               x_cnt = df.x.value_counts().max() 
-           except AttributeError:
-               print df
-               raise
-           if not x_cnt.max() == x_cnt.min():
-               print "  There's something wrong, counted {0} instances of x"\
-                       .format(x_cnt.max())
-               return 0
-
        if cnt == 50:
 
            df = correct_df_translation_rotation( df )\
@@ -352,14 +346,16 @@ def read_raw_tecplot_folder_and_write_pandas_hdf5(
 
            df = df.sort_values( by = ['x','y','t'] )
 
-           df.set_index( ['x','y'], inplace = True)
+           #df.set_index( ['x','y'], inplace = True)
 
-           if t == cnt: append = False; mode = 'w'
-           else: append = True; mode = 'a'
-
-           df.to_hdf( join( output_root, output_file ), 
-                     'data', format = 't', append = append ,
-                     mode = mode)
+           if t == 0:
+               hdf_store.put( 'data', df , 
+                                data_columns = ['x','y','t'],
+                               format = 't')
+           else:
+               hdf_store.append( 'data', df , 
+                                data_columns = ['x','y','t'],
+                               format = 't')
 
            cnt = 0
 
@@ -371,9 +367,11 @@ def read_raw_tecplot_folder_and_write_pandas_hdf5(
 
     progress.finish()
 
+    hdf_store.close()
+
     return 1
 
-def run_process( root = 0 , overwrite = False ):
+def run_raw_data_collection( root = 0 , overwrite = False ):
     from os import listdir
     from os.path import isdir,join
 
@@ -383,7 +381,7 @@ def run_process( root = 0 , overwrite = False ):
 
     case_folders = [f for f in listdir(root) \
                     if isdir( join( root , f ) ) \
-                    and f.endswith('_tr')
+                    and f.endswith('_tr') and not "Slit" in f
                    ]
 
     for cf in case_folders:

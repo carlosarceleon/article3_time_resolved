@@ -642,9 +642,9 @@ def decript_case_name(case_name):
         trailing_edge = findall('[litSrTE201R]+', case_name)[0]
     except IndexError:
         print case_name
-    if trailing_edge == "STE":     trailing_edge = 'straight'
-    if trailing_edge == "Sr20R21": trailing_edge = 'serrated'
-    if trailing_edge == "Slit20R21": trailing_edge = 'serrated'
+    if trailing_edge == "STE":       trailing_edge = 'straight'
+    if trailing_edge == "Sr20R21":   trailing_edge = 'serrated'
+    if trailing_edge == "Slit20R21": trailing_edge = 'slitted'
 
     phi = 0 ; alpha = 0 ; U = 0 ; z = 0
 
