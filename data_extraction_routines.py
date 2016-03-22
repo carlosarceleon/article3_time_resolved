@@ -13,7 +13,7 @@ def extract_relevant_data( case_list = [], exceptions = [], y_delta_locs = [],
     from raw_data_processing_routines import decript_case_name
     from progressbar                  import ProgressBar,Percentage
     from progressbar                  import Bar,ETA,SimpleProgress
-    from numpy                        import array, round
+    from numpy                        import array, round, sqrt, abs
     from data_cleaning_routines       import show_surface_from_df
 
     x_2h_locs    = round( array( x_2h_locs ),    2 )
@@ -85,36 +85,20 @@ def extract_relevant_data( case_list = [], exceptions = [], y_delta_locs = [],
 
         available_xy_locs = []
         for x,y in requested_locations:
-            thresh = 0.05
 
-            while hf_coords[ 
-                ( hf_coords.x < x + thresh ) & \
-                ( hf_coords.x > x - thresh ) 
-            ].empty:
-                thresh += 0.01
-                print "   increasing thresh to {0}".format(thresh)
-                if thresh > 0.4: break
-            if thresh > 0.4: continue
+            hf_coords[ 'vec_len_diff' ] = \
+                    sqrt( ( x - hf_coords.x )**2 + ( y - hf_coords.y )**2 )
 
-            # Do an inverse search quadrant around the closest x to find
-            # available values of y ########################################
-            possible_y_locs = hf_coords[ 
-                ( hf_coords.x < x + thresh ) & \
-                ( hf_coords.x > x - thresh ) 
-            ].y.values
+            selected_x = hf_coords.ix[ hf_coords.vec_len_diff.idxmin() ].x
+            selected_y = hf_coords.ix[ hf_coords.vec_len_diff.idxmin() ].y
 
-            selected_y = find_nearest( y, possible_y_locs )
-
-            # Based on the found y value closest to that requested, request
-            # the closest x value ##########################################
-            possible_x_locs = hf_coords[ 
-                ( hf_coords.y == selected_y )
-            ].x.values
-
-            selected_x = find_nearest( x, possible_x_locs )
+            print hf_coords.vec_len_diff.min(), x, selected_x, y, selected_y
 
             # Append it all into tuples to keep them together ##############
-            available_xy_locs.append( ( selected_x, selected_y ) )
+            if ( selected_x, selected_y ) in available_xy_locs:
+                continue
+            else:
+                available_xy_locs.append( ( selected_x, selected_y ) )
 
         available_xy_locs = list( set( available_xy_locs ) )
 
