@@ -118,7 +118,11 @@ def read_davis_tecplot_folder_and_rotate_to_serration_surface(tecplot_folder,
         mask[1], mask[2]
     )
 
-    df = rotate_df( df, mask_rotation + angle_corr)
+    if 'STE' in df.case_name.unique()[0] or 'loc10' in df.case_name.unique()[0]:
+        airfoil_angle_correction = -11
+    else:
+        airfoil_angle_correction = 0
+    df = rotate_df( df, mask_rotation + angle_corr + airfoil_angle_correction )
 
     # Regrid ###################################################################
     df = regrid_df(
@@ -142,24 +146,42 @@ def read_davis_tecplot_folder_and_rotate_to_serration_surface(tecplot_folder,
     df.to_pickle("averaged_data/{0}.p".format(df.case_name.unique()[0]))
 
 
-def show_sample_bls_from_df(df):
+def show_sample_bls_from_df( df ):
     import matplotlib.pyplot as plt
-    from matplotlib import rc
     import seaborn as sns
-    from numpy import meshgrid
+    from matplotlib              import rc
+    from numpy                   import meshgrid
+    from boundary_layer_routines import return_bl_parameters
 
     rc('text',usetex=True)
     rc('font',weight='normal')
 
     sns.set_context('paper')
-    sns.set(font='serif',font_scale=1.6,style='whitegrid',
+    sns.set(font='serif',font_scale=1.6,style='ticks',
             rc={"axes.axisbelow": False})
     rc('font',family='serif', serif='cm10')
 
     # At 0% 2h:
-    pct0 = find_nearest( 0.00, df.x  )
+    if 'STE' in df.case_name.unique()[0] or 'loc10' in df.case_name.unique()[0]:
+        pct0 = find_nearest( -0.05*40, df.x  )
+    else:
+        pct0 = find_nearest(  0.05*40, df.x  )
     # At 10% 2h:
     pct80 = find_nearest( 0.75*40., df.x )
+
+    trailing_edge,phi,alpha,U,z = \
+            decript_case_name( df.case_name.unique()[0] )
+
+    if trailing_edge == 'serrated': device = 'Sr20R21'
+    elif trailing_edge == 'straight': device = 'STE'
+    elif trailing_edge == 'slitted': device = 'Slit20R21'
+
+    case_name = "{0}_a{1}_p{2}_U20_z{3:02.0f}_tr".\
+            format( device, alpha, phi, float(z)*20 )
+
+    bl_params = return_bl_parameters( 
+        case_name,
+        [pct0] )
 
     X,Y = meshgrid( df.x.unique() , df.y.unique() )
     U   = df['u'].reshape(X.shape)
@@ -181,9 +203,12 @@ def show_sample_bls_from_df(df):
         lw = 3, c = 'k' 
     )
 
+    d_99 = bl_params.delta_99.values[0]
+    axes[1].axhline( d_99 , lw = 2, c = 'r' )
+
     axes[0].axhline( 0 , lw = 3 , c = 'k' )
 
-    stride = 20
+    stride = 10
 
     axes[0].quiver(
         X[::stride, ::stride],
@@ -429,7 +454,7 @@ def get_angle_between_points(point1, point2):
 
 
 
-def show_surface_from_df(df, variable=[], points = [], mask = []):
+def show_surface_from_df(df, variable='u', points = [], mask = []):
     import matplotlib.pyplot as plt
     from numpy import meshgrid,linspace
 
@@ -467,7 +492,10 @@ def show_surface_from_df(df, variable=[], points = [], mask = []):
         axes.plot(mask[0,:],mask[1,:])
 
     if len(points):
-        axes.scatter(points[0],points[1])
+        for p in points:
+            px = find_nearest( p[0], df.x.unique() )
+            py = find_nearest( p[1], df.y.unique() )
+            axes.scatter( px, py )
 
     plt.colorbar(cf)
     axes.set_aspect('equal')

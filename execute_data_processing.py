@@ -1,8 +1,10 @@
-import data_cleaning_routines as dcr
+from data_cleaning_routines       import \
+        read_davis_tecplot_folder_and_rotate_to_serration_surface
 from checklist                    import checklist
 from raw_data_processing_routines import run_raw_data_collection
 from boundary_layer_routines      import run_bl_analysis
 from data_extraction_routines     import run_data_extraction
+from data_analysis_routines       import do_the_time_resolved_analysis
 
 def average_tecplot_dat_to_pandas_p(folder, plot = False, 
                                     ignore_checklist = False):
@@ -10,7 +12,7 @@ def average_tecplot_dat_to_pandas_p(folder, plot = False,
     for tecplot_folder in [f for f in os.listdir( folder )]:
         if not checklist[tecplot_folder] or ignore_checklist:
             print "  Processing {0}".format(tecplot_folder)
-            dcr.read_davis_tecplot_folder_and_rotate_to_serration_surface(
+            read_davis_tecplot_folder_and_rotate_to_serration_surface(
                 tecplot_folder = os.path.join(folder,tecplot_folder), 
                 plot = plot
             )
@@ -25,8 +27,8 @@ def average_tecplot_dat_to_pandas_p(folder, plot = False,
 #average_tecplot_dat_to_pandas_p(
 #    '/home/carlos/Documents/PhD/Articles/Article_3/Scripts/time_resolved'+\
 #    '/tecplot_data_avg',
-#    plot = False,
-#    ignore_checklist = True
+#    plot = True,
+#    ignore_checklist = False
 #)
 # ##############################################################################
 
@@ -41,7 +43,12 @@ def average_tecplot_dat_to_pandas_p(folder, plot = False,
 # 3) ###########################################################################
 # The pre-processing of the data, from raw TECPLOT to an aligned data frame ####
 #
-#run_raw_data_collection( overwrite = False )
+#run_raw_data_collection( overwrite = True , 
+#                        only_for = [
+#                            'STE_a0_p0_U20_z00_tr',
+#                            'Sr20R21_a0_p0_U20_z10_tr'
+#                        ]
+#                       )
 #
 # ##############################################################################
 
@@ -49,7 +56,14 @@ def average_tecplot_dat_to_pandas_p(folder, plot = False,
 # The data extraction of the interesting coordinate timeseries from the aligned
 # data frame created in the previous step ######################################
 #
-#run_data_extraction()
+run_data_extraction()
+#
+# ##############################################################################
+
+# 5) ###########################################################################
+# Do the data analysis #########################################################
+#
+#do_the_time_resolved_analysis()
 #
 # ##############################################################################
 

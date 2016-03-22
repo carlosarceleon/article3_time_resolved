@@ -74,6 +74,9 @@ def get_edge_velocity(df,
     df['v_rms_rate_of_change'] = list(diff(df.v_rms)/diff(df.y/1000.))+[0]
     ############################################################################
 
+    #df.plot( condition, 'y' )
+    #plt.show()
+
     while not U_edge:
         for y_loc in df.iterrows():
             if y_loc[1][condition] < threshold:
@@ -204,7 +207,7 @@ def write_boundary_layers(df,
             escape = False
         )
 
-def run_bl_analysis( pickles_folder = 0):
+def run_bl_analysis( pickles_folder = 0 ):
     from os import listdir
     from os.path import join
     from pandas import read_pickle, DataFrame
@@ -304,28 +307,35 @@ def return_bl_parameters( case, x_series ):
     bl_df = read_pickle( bl_pickle_file )
 
 
-    if 'z00' in case:
+    if 'z00' in case and not "STE" in case:
         limits = (0, 43)
     elif 'z05' in case:
         limits = (0, 25)
     else:
-        limits = (0, 10)
+        limits = (-8, 10)
 
     variables = [ 'Ue', 'delta_99', 'delta_displacement', 
                 'delta_momentum' ]
+
     bl_param_df = DataFrame()
 
     for x in x_series:
         data = {}
         for var in variables:
 
-            case_df = bl_df[ bl_df.case == case ][ ['x',var] ].dropna()
+            case_df = bl_df[ bl_df.case == case ][ ['x', var] ].dropna()
 
-            popt, pvar = curve_fit( 
-                quad_func, 
-                case_df[ ( case_df.x < limits[1] ) & ( case_df.x > 0 )].x, 
-                case_df[ ( case_df.x < limits[1] ) & ( case_df.x > 0 )][var] 
-            )
+            try:
+                popt, pvar = curve_fit( 
+                    quad_func, 
+                    case_df[ ( case_df.x <= limits[1] ) & \
+                            ( case_df.x >= limits[0] )].x, 
+                    case_df[ ( case_df.x <= limits[1] ) & \
+                            ( case_df.x >= limits[0] )][var] 
+                )
+            except TypeError:
+                print x, case
+                raise
 
             data[var] = quad_func( x, popt[0], popt[1], popt[2] ) ,
 
@@ -368,45 +378,56 @@ def plot_all_bls( bl_pickle_file = 0 ):
         for var in variables:
             for c in cases:
 
-
-                if 'z00' in c:
-                    limits = (0, 40)
+                if 'z00' in c and not "STE" in c:
+                    limits = (0, 30)
                 elif 'z05' in c:
                     limits = (0, 20)
                 else:
-                    limits = (0, 10)
+                    limits = (-8, 10)
 
                 case_df = bl_df[ 
                     ( bl_df.case == c ) & \
                     ( bl_df.alpha == a )
                 ][ ['x',var] ].dropna()
 
-                popt, pvar = curve_fit( 
-                    quad_func, 
-                    case_df[ (case_df.x < limits[1] ) & ( case_df.x > 0 )].x, 
-                    case_df[ (case_df.x < limits[1] ) & ( case_df.x > 0 )][var] )
+                skip = False
+                try:
+                    popt, pvar = curve_fit( 
+                        quad_func, 
+                        case_df[ (case_df.x < limits[1] ) & \
+                                ( case_df.x > limits[0] )].x, 
+                        case_df[ (case_df.x < limits[1] ) & \
+                                ( case_df.x > limits[0] )][var])
+                except TypeError:
+                    print c
+                    skip = True
 
                 axes[cnt].plot( 
                     case_df[ case_df.x < limits[1] ].x,
                     case_df[ case_df.x < limits[1] ][var],
-                    'o'
+                    'o',
+                    label = c.replace("_"," ")
                 )
 
-                axes[cnt].plot( 
-                    case_df[ case_df.x < limits[1] ].x,
-                    quad_func( case_df[ case_df.x < limits[1] ].x, 
-                              popt[0], popt[1], popt[2] ),
-                    '-',
-                    c = 'k',
-                    lw = 2
-                )
+                if not skip:
+                    axes[cnt].plot( 
+                        case_df[ case_df.x < limits[1] ].x,
+                        quad_func( case_df[ case_df.x < limits[1] ].x, 
+                                  popt[0], popt[1], popt[2] ),
+                        '-',
+                        c = 'k',
+                        lw = 2
+                    )
 
             cnt += 1
 
         for ax,var in zip(axes,variables):
-            ax.set_xlim( 0, 40 )
+            ax.set_xlim( -5, 40 )
             ax.set_xlabel('$x$ [mm]')
             ax.set_ylabel(var.replace('_',' ')+ ' [mm]')
+
+        axes[0].legend( bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+           ncol=2, mode="expand", borderaxespad=0.)
 
         plt.savefig("BL_a{0}".format(a), bbox_inches = 'tight')
 

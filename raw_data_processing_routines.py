@@ -150,9 +150,14 @@ def correct_df_translation_rotation( df ):
         mask[1], mask[2]
     )
 
-    df = rotate_df( df, mask_rotation + angle_corr)
+    if 'STE' in df.case_name or 'z10' in df.case_name:
+        airfoil_angle_correction = -11.4
+    else:
+        airfoil_angle_correction = 0
 
-    df = df.dropna()
+    df = rotate_df( df, mask_rotation + angle_corr + airfoil_angle_correction )
+
+    #df = df.dropna()
 
     df.x = round(df.x , 3)
     df.y = round(df.y , 3)
@@ -299,6 +304,9 @@ def read_raw_tecplot_folder_and_write_pandas_hdf5(
     if not output_file.endswith('_Aligned.hdf5'):
         output_file = output_file.replace("_Aligned.hdf5","")+"_Aligned.hdf5"
 
+    if 'STE' in case_folder or 'z10' in case_folder:
+        output_file = output_file.replace( '.hdf5', '_AirfoilNormal.hdf5' )
+
     if isfile(join( output_root, output_file )) and not overwrite:
         print "  Exiting; file exists:\n      {0}".format(output_file)
         return 0
@@ -371,7 +379,7 @@ def read_raw_tecplot_folder_and_write_pandas_hdf5(
 
     return 1
 
-def run_raw_data_collection( root = 0 , overwrite = False ):
+def run_raw_data_collection( root = 0 , overwrite = False , only_for = [] ):
     from os import listdir
     from os.path import isdir,join
 
@@ -386,9 +394,17 @@ def run_raw_data_collection( root = 0 , overwrite = False ):
 
     for cf in case_folders:
 
-        read_raw_tecplot_folder_and_write_pandas_hdf5(
-            case_folder           = cf,
-            root                  = root,
-            output_file           = 0,
-            overwrite             = overwrite,
-        )
+        if len( only_for ):
+            skip = True
+            for ex in only_for:
+                if ex == cf:
+                    skip = False
+                    break
+
+        if not skip:
+            read_raw_tecplot_folder_and_write_pandas_hdf5(
+                case_folder           = cf,
+                root                  = root,
+                output_file           = 0,
+                overwrite             = overwrite,
+            )
