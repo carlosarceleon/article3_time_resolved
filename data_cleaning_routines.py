@@ -454,7 +454,8 @@ def get_angle_between_points(point1, point2):
 
 
 
-def show_surface_from_df(df, variable='u', points = [], mask = []):
+def show_surface_from_df(df, variable='u', points = [], mask = [],
+                        plot_name = ''):
     import matplotlib.pyplot as plt
     from numpy import meshgrid,linspace
 
@@ -500,7 +501,10 @@ def show_surface_from_df(df, variable='u', points = [], mask = []):
     plt.colorbar(cf)
     axes.set_aspect('equal')
 
-    plt.show()
+    if not plot_name:
+        plt.show()
+    else:
+        plt.savefig( plot_name , bbox_inches = 'tight' )
     plt.close(fig)
 
 def show_streamlined_surface_from_df(df, variable='u', 

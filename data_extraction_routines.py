@@ -9,11 +9,10 @@ def extract_relevant_data( case_list = [], exceptions = [], y_delta_locs = [],
     from os.path                      import join,split
     from pandas                       import DataFrame, HDFStore, read_pickle
     from boundary_layer_routines      import return_bl_parameters
-    from raw_data_processing_routines import find_nearest
     from raw_data_processing_routines import decript_case_name
     from progressbar                  import ProgressBar,Percentage
     from progressbar                  import Bar,ETA,SimpleProgress
-    from numpy                        import array, round, sqrt, abs
+    from numpy                        import array, round, linspace
     from data_cleaning_routines       import show_surface_from_df
 
     x_2h_locs    = round( array( x_2h_locs ),    2 )
@@ -83,24 +82,14 @@ def extract_relevant_data( case_list = [], exceptions = [], y_delta_locs = [],
                 format(d_99)
         # ######################################################################
 
-        available_xy_locs = []
-        for x,y in requested_locations:
-
-            hf_coords[ 'vec_len_diff' ] = \
-                    sqrt( ( x - hf_coords.x )**2 + ( y - hf_coords.y )**2 )
-
-            selected_x = hf_coords.ix[ hf_coords.vec_len_diff.idxmin() ].x
-            selected_y = hf_coords.ix[ hf_coords.vec_len_diff.idxmin() ].y
-
-            print hf_coords.vec_len_diff.min(), x, selected_x, y, selected_y
-
-            # Append it all into tuples to keep them together ##############
-            if ( selected_x, selected_y ) in available_xy_locs:
-                continue
-            else:
-                available_xy_locs.append( ( selected_x, selected_y ) )
-
-        available_xy_locs = list( set( available_xy_locs ) )
+        available_xy_locs = hf_coords[
+            ( hf_coords.x > min( x_2h_locs ) * 40. ) & \
+            ( hf_coords.x < max( x_2h_locs ) * 40. ) & \
+            ( hf_coords.y > min( y_delta_locs ) * d_99 ) & \
+            ( hf_coords.y < max( y_delta_locs ) * d_99 )
+        ][ ['x','y'] ]
+              
+        available_xy_locs = [tuple(x) for x in available_xy_locs.values]
 
         if plot:
 
@@ -115,8 +104,17 @@ def extract_relevant_data( case_list = [], exceptions = [], y_delta_locs = [],
             )
 
             df_av = read_pickle( 'averaged_data/' + case_name + '.p' )
-            show_surface_from_df( df_av , points = available_xy_locs )
+            show_surface_from_df( df_av , points = available_xy_locs ,
+                                plot_name = 'ReservedData/' + f + '.png'
+                                )
 
+        query   = ''
+        cnt_all = 0
+
+        cnt = 0
+        time_series_hdf = HDFStore( 'ReservedData/' + f + '.hdf5' , 'w' )
+
+        vertical_split_blocks = 10
 
         progress = ProgressBar(
              widgets=[
@@ -124,36 +122,31 @@ def extract_relevant_data( case_list = [], exceptions = [], y_delta_locs = [],
                  Percentage(),' ',
                  ETA(), ' (query bunch  ',
                  SimpleProgress(),')'], 
-             maxval = len( available_xy_locs )
+             maxval = vertical_split_blocks
              ).start()
 
-        query   = ''
-        cnt_all = 0
+        # Don't try to get it all at once; split the vertical in 4 pieces
+        y_ranges = linspace( 
+            min( y_delta_locs ),
+            max( y_delta_locs ),
+            vertical_split_blocks
+        ) * d_99
 
-        cnt = 0
-        time_series_hdf = HDFStore( 'ReservedData/' + f + '.hdf5' )
-        for (x,y),(xr,yr),(xn,yn) \
-                in zip(available_xy_locs, requested_locations, 
-                       requested_normalized_locations):
+        xmin = min(x_2h_locs) * 40.
+        xmax = max(x_2h_locs) * 40.
 
-            query = query + " ( x={0:.3f} & y={1:.3f} ) ".\
-                    format( x, y )
+        for ymin, ymax in zip( y_ranges[:-1], y_ranges[1:] ):
+
+            query = " x>={0} & x<{1} & y>={2} & y<{3} ".\
+                    format( xmin, xmax, ymin, ymax )
 
             df_t = hdf_t.select(
                 key   = 'data',
-                where = query,
+                where = [ query ],
             )
 
-            if not df_t.shape[0]:
-                print " Could not find the coordinates"
-                print "   x = {0}, y = {1}".format(x,y)
-
-            df_t['x_requested'] = round( xr, 3 )
-            df_t['y_requested'] = round( yr, 3 )
-
-            df_t['near_x_2h']    = round( xn, 2 )
-            df_t['near_y_delta'] = round( yn, 2 )
-
+            df_t['near_x_2h']    = round( df_t.x / 40.,  4 )
+            df_t['near_y_delta'] = round( df_t.y / d_99, 4 )
 
             if not cnt:
                 time_series_hdf.put( 'data', df_t , 
@@ -172,20 +165,8 @@ def extract_relevant_data( case_list = [], exceptions = [], y_delta_locs = [],
                                        ],
                                format = 't')
 
-            ## Now get the time series ######################################
-            #time_series[-1] = time_series[-1]\
-            #        .append( df_t , ignore_index = True )
-            ## ##############################################################
-
             cnt_all += 1
             cnt     += 1
-
-            #if cnt > 20 or cnt_all == len( available_xy_locs )-1:
-            #    time_series[-1] = time_series[-1].drop_duplicates()
-            #    time_series.append( DataFrame() )
-            #    cnt = 0
-
-            query    = ''
 
             progress.update(cnt_all)
 
@@ -195,12 +176,6 @@ def extract_relevant_data( case_list = [], exceptions = [], y_delta_locs = [],
         progress.finish()
         hdf_t.close()
         time_series_hdf.close()
-
-        #all_time_series = DataFrame()
-        #for ts in time_series:
-        #    all_time_series = all_time_series.append( ts, ignore_index = True )
-
-        #all_time_series.to_pickle( 'ReservedData/' + f + '.p' )
 
 
 def run_data_extraction():
@@ -223,7 +198,7 @@ def run_data_extraction():
         print "      "+c
     
     #y_delta_locs = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
-    y_delta_locs = arange( 0.1, 1.5, 0.02 )
+    y_delta_locs = arange( 0.1, 2.0, 0.02 )
 
     for cl in case_list:
         x_2h_locs = []
